@@ -1,0 +1,5 @@
+python-dotenv
+azure-cognitiveservices-speech
+google-ai-generativelanguage
+elevenlabs
+pyaudio
