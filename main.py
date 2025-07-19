@@ -17,10 +17,6 @@ elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
 # Configure APIs
 genai.configure(api_key=gemini_api_key)
 
-# Validate that all necessary environment variables are set
-if not all([azure_speech_key, azure_speech_region, gemini_api_key, elevenlabs_api_key, elevenlabs_voice_id]):
-    raise ValueError("One or more required environment variables are not set. Please check your .env file.")
-
 
 # --- 2. FUNCTION DEFINITIONS ---
 
