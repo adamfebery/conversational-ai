@@ -1,6 +1,10 @@
 import os
 import azure.cognitiveservices.speech as speechsdk
+import google.generativeai as genai
+import argparse
 from dotenv import load_dotenv
+from elevenlabs.client import ElevenLabs
+import pyaudio
 
 # --- 1. CONFIGURATION ---
 # Load environment variables from .env file
@@ -17,10 +21,13 @@ elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
 if not all([azure_speech_key, azure_speech_region, gemini_api_key, elevenlabs_api_key, elevenlabs_voice_id]):
     raise ValueError("One or more required environment variables are not set. Please check your .env file.")
 
+# Configure APIs
+genai.configure(api_key=gemini_api_key)
+
 
 # --- 2. FUNCTION DEFINITIONS ---
 
-def load_persona(file_path=".persona-aw"):
+def load_persona(file_path):
     """Loads the AI's persona from a text file."""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -33,44 +40,96 @@ def load_persona(file_path=".persona-aw"):
         return "You are a helpful AI assistant."
 
 def transcribe_from_microphone():
-    """Captures audio from the microphone and transcribes it to text using Azure Speech Service."""
-    print("Listening for your question...")
-    # TODO: We will implement this function in the next step.
-    transcribed_text = "What is the distance between Earth and the Moon?" # Placeholder text
-    print(f"🎙️ You said: {transcribed_text}")
-    return transcribed_text
+    """Captures a single utterance from the microphone."""
+    print("Listening...")
+    speech_config = speechsdk.SpeechConfig(subscription=azure_speech_key, region=azure_speech_region)
+    audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+    
+    result = speech_recognizer.recognize_once_async().get()
 
-def get_gemini_response(question, persona):
-    """Sends the question and persona to Gemini and returns the text response."""
+    if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+        print(f"🎙️ You: {result.text}")
+        return result.text
+    elif result.reason == speechsdk.ResultReason.NoMatch:
+        print("❓ Understood nothing.")
+    elif result.reason == speechsdk.ResultReason.Canceled:
+        print(f"🚫 Canceled: {result.cancellation_details.reason}")
+    return ""
+
+def get_gemini_response(chat_session, question):
+    """Gets a contextual response from the Gemini chat session."""
     print("🧠 Thinking (with persona)...")
-    # TODO: We will implement this function later.
-    # The 'persona' will be prepended to the user's question to guide the model's response style.
-    # Placeholder response that reflects a persona
-    answer = "Ah, a question about the heavens! As a wise, old astronomer, I can tell you that the Moon, our lovely celestial neighbor, keeps an average distance of about 384,400 kilometers from our home, the Earth."
-    print(f"🤖 Gemini's Persona Answer: {answer}")
-    return answer
+    try:
+        response = chat_session.send_message(question)
+        full_response = "".join(part.text for part in response.parts)
+        print(f"🤖 Bot: {full_response}")
+        return full_response
+    except Exception as e:
+        print(f"An error occurred with the Gemini API: {e}")
+        return "Sorry, I'm having trouble thinking right now."
 
 def speak_text_with_elevenlabs(text):
-    """Converts text to speech using ElevenLabs and plays it."""
+    """Converts text to speech and plays it using PyAudio."""
+    if not text or not elevenlabs_api_key or not elevenlabs_voice_id:
+        return
+        
     print("💬 Speaking...")
-    # TODO: We will implement this function later.
-    # This function will call the ElevenLabs API and stream the audio.
-    pass
+    try:
+        client = ElevenLabs(api_key=elevenlabs_api_key)
+        audio_stream = client.text_to_speech.stream(
+            elevenlabs_voice_id, text=text, model_id="eleven_multilingual_v2", output_format="pcm_24000"
+        )
+        
+        p = pyaudio.PyAudio()
+        stream = p.open(format=pyaudio.paInt16, channels=1, rate=24000, output=True)
+        for chunk in audio_stream:
+            if chunk:
+                stream.write(chunk)
+        
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+            
+    except Exception as e:
+        print(f"An error occurred during audio playback: {e}")
 
 
-# --- 3. MAIN EXECUTION ---
+# --- 3. MAIN CONVERSATIONAL LOOP ---
 
 if __name__ == "__main__":
-    # Load the persona from the specified file
-    persona_prompt = load_persona(".persona-aw")
+    parser = argparse.ArgumentParser(description="Run a conversational AI with a specific persona.")
+    parser.add_argument(
+        "--persona",
+        required=True,
+        help="The name of the persona to use from the 'personas' directory (e.g., 'bob' for 'personas/bob.txt')"
+    )
+    args = parser.parse_args()
 
-    # Step 1: Get the user's question from their voice
-    question_text = transcribe_from_microphone()
+    # Construct the persona file path from the command-line argument
+    persona_file_path = os.path.join("personas", f"{args.persona}.txt")
 
-    # Step 2: Get an answer from Gemini, guided by the persona
-    answer_text = get_gemini_response(question_text, persona_prompt)
+    # Load the persona and initialize the Gemini Model with it
+    persona_prompt = load_persona(persona_file_path)
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    chat = model.start_chat(history=[
+        {'role': 'user', 'parts': [persona_prompt]},
+        {'role': 'model', 'parts': ["Understood. I will now respond as this persona."]}
+    ])
+    
+    exit_phrases = ("goodbye", "exit", "stop", "that's all")
+    print(f"👋 Hello! I'm ready to chat with my persona. Say 'goodbye' to end.")
+    
+    while True:
+        question_text = transcribe_from_microphone()
+        if not question_text:
+            continue
 
-    # Step 3: Speak the answer using the cloned voice
-    speak_text_with_elevenlabs(answer_text)
+        if any(phrase in question_text.lower() for phrase in exit_phrases):
+            speak_text_with_elevenlabs("Goodbye!")
+            break
 
-    print("\n✅ Script finished.")
+        answer_text = get_gemini_response(chat, question_text)
+        speak_text_with_elevenlabs(answer_text)
+
+    print("\n✅ Conversation ended.")
