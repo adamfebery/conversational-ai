@@ -4,3 +4,4 @@ google-ai-generativelanguage
 elevenlabs
 pyaudio
 google-genai
+python-vlc
