@@ -1,4 +1,4 @@
-# AI Voice Bot Project
+# Conversational AI (Powered by Gemini, ElevenLebs & HeyGen)
 
 ![Project Banner](https://placehold.co/800x250/1e293b/ffffff?text=AI%20Voice%20Bot&font=lato)
 
