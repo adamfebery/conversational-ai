@@ -22,17 +22,7 @@ No technical support is offered with this code, by running the demonstration you
 
 ## ⚙️ How It Works
 
-The application initializes by loading a persona, then enters a loop to process voice commands and generate a spoken response.
-
-```mermaid
-    A -->[Start Application] --> B{Load Persona File};
-    B --> C[🎙️ User Speaks];
-    C -->|Microphone Input| D(Azure Speech-to-Text);
-    D -->|Transcribed Text| E{Google Gemini API};
-    E -->|Generated Answer| F(ElevenLabs Text-to-Speech);
-    F -->|Audio Stream| G[🔊 Bot Responds];
-    G --> End the conversation by saying "Goodbye."
-```
+The application initializes by loading a persona, then enters a loop to process voice commands and generate a spoken response. End the loop by saying "Goodbye".
 
 ## 📂 Project Structure
 
