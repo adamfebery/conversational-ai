@@ -1,4 +1,4 @@
-# 🤖 AI Voice Bot Project
+# Conversational AI (Powered by Gemini, ElevenLebs & HeyGen)
 
 ![Project Banner](https://placehold.co/800x250/1e293b/ffffff?text=AI%20Voice%20Bot&font=lato)
 
@@ -46,8 +46,7 @@ Your project should be organized with the following directory structure:
 |   |-- bob.txt
 |   `-- sally.txt
 |
-|-- main.py
-|-- persona.py
+|-- gui.py
 |-- requirements.txt
 `-- .env
 ```
@@ -86,8 +85,8 @@ Before you begin, ensure you have the following:
 
 1.  **Clone the repository:**
     ```bash
-    git clone [https://github.com/your-username/your-repo-name.git](https://github.com/your-username/your-repo-name.git)
-    cd your-repo-name
+    git clone [https://github.com/adamfebery/conversational-ai.git](https://github.com/adamfebery/conversational-ai)
+    cd conversational ai
     ```
 
 2.  **Set up a virtual environment (Recommended):**
@@ -126,14 +125,14 @@ Before you begin, ensure you have the following:
 
 ### Running the Application
 
-Run the `persona.py` script from your terminal, using the `--persona` flag to specify which personality to load (without the `.txt` extension).
+Run the `gui.py` script from your terminal
 
 ```bash
-# Example: Run the bot with Bob's persona
-python persona.py --persona bob
+# Example: Run the bot 
+python gui.py
 ```
 
-The application will start, load the specified persona, and then begin listening for your voice.
+The application will start and prompt you to pick a persona and start your session.
 
 ---
 
