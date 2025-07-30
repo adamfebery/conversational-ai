@@ -31,6 +31,8 @@ class App:
         # --- VLC Player Setup ---
         self.vlc_instance = vlc.Instance()
         self.media_player = self.vlc_instance.media_player_new()
+        # --- Hidden Sound Player Setup ---
+        self.sound_player = self.vlc_instance.media_player_new()
 
         # --- Script ---
         self.script = []
@@ -38,7 +40,7 @@ class App:
         self.script_job = None
 
         # --- Create subdirectories ---
-        for dir_name in ["videos", "personas", "scripts"]:
+        for dir_name in ["videos", "personas", "scripts", "assets"]:
             if not os.path.exists(dir_name):
                 os.makedirs(dir_name)
 
@@ -103,10 +105,39 @@ class App:
         link_label.pack(side=tk.BOTTOM, pady=5)
         link_label.bind("<Button-1>", lambda e: self.open_link("https://www.kocho.co.uk"))
         
+        # --- Build Right Panel Widgets and Bind Keys ---
         self.build_right_panel_widgets()
+        self.bind_keys()
+        
+        # --- Final Setup ---
         self.populate_personas()
         self.process_queue()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def bind_keys(self):
+        """Binds the hidden key features."""
+        self.root.bind("<F9>", self.play_intro_sound)
+        self.root.bind("<F10>", self.stop_intro_sound)
+
+    def play_intro_sound(self, event=None):
+        """Plays the intro.mp3 sound file."""
+        sound_path = os.path.join("assets", "HelpDesk-Demo.mp3")
+        if os.path.exists(sound_path):
+            try:
+                media = self.vlc_instance.media_new(sound_path)
+                self.sound_player.set_media(media)
+                self.sound_player.play()
+                print("Playing intro sound...") # Log to console, not GUI
+            except Exception as e:
+                print(f"Error playing sound: {e}")
+        else:
+            print(f"Sound file not found: {sound_path}")
+
+    def stop_intro_sound(self, event=None):
+        """Stops the intro sound."""
+        if self.sound_player.is_playing():
+            self.sound_player.stop()
+            print("Intro sound stopped.")
 
     def build_right_panel_widgets(self):
         # Video Player Frame
@@ -142,7 +173,7 @@ class App:
         
         self.video_frame.pack_forget()
         self.summary_frame.pack_forget()
-        self.stop_video() # Stop video and script if running
+        self.stop_video()
         self.load_script(persona_name)
 
         video_path = os.path.join("videos", f"{persona_name}.mp4")
@@ -150,11 +181,11 @@ class App:
         if os.path.exists(video_path):
             self.video_frame.pack(fill=tk.BOTH, expand=True)
             self.load_video(video_path)
-            self.start_button.config(state=tk.DISABLED) 
+            self.start_button.config(state=tk.DISABLED)
         else:
             self.summary_frame.pack(fill=tk.BOTH, expand=True)
             self.update_persona_summary(persona_name)
-            self.start_button.config(state=tk.NORMAL) 
+            self.start_button.config(state=tk.NORMAL)
 
     def load_script(self, persona_name):
         self.script = []
@@ -166,7 +197,6 @@ class App:
         self.log_text.config(state=tk.NORMAL)
         self.log_text.delete(1.0, tk.END)
         self.log_text.config(state=tk.DISABLED)
-
 
     def update_persona_summary(self, persona_name):
         persona_file = os.path.join("personas", f"{persona_name}.txt")
@@ -201,32 +231,26 @@ class App:
 
     def play_video(self):
         if self.media_player.get_media() and not self.media_player.is_playing():
-             # If paused, just play. Otherwise, start from the beginning.
             if self.media_player.get_state() != vlc.State.Paused:
-                self.stop_video() # Reset before playing
+                self.stop_video()
                 self.script_line_index = 0
                 self.log_text.config(state=tk.NORMAL)
                 self.log_text.delete(1.0, tk.END)
                 self.log_text.config(state=tk.DISABLED)
-
             self.media_player.play()
             self.status_var.set("Playing video demo...")
             self.run_scripted_log()
 
     def run_scripted_log(self):
-        """Displays the next line of the script in the log."""
         if self.script_job:
             self.root.after_cancel(self.script_job)
-
         if self.script_line_index < len(self.script) and self.media_player.is_playing():
             line = self.script[self.script_line_index]
             self.log_text.config(state=tk.NORMAL)
             self.log_text.insert(tk.END, line + "\n")
             self.log_text.config(state=tk.DISABLED)
             self.log_text.see(tk.END)
-            
             self.script_line_index += 1
-            # Schedule the next line to appear after a delay (e.g., 4 seconds)
             self.script_job = self.root.after(4000, self.run_scripted_log)
 
     def pause_video(self):
@@ -278,7 +302,6 @@ class App:
         try:
             while True:
                 msg = self.update_queue.get_nowait()
-                # Only process log messages if not in a scripted demo
                 if msg["type"] == "log" and not self.script:
                     self.log_message(msg["value"])
                 elif msg["type"] == "status":
@@ -297,7 +320,6 @@ class App:
             self.root.after(100, self.process_queue)
 
     def log_message(self, message):
-        """Logs a message to the text area, only used for non-scripted mode."""
         if not self.script:
             self.log_text.config(state=tk.NORMAL)
             self.log_text.insert(tk.END, message + "\n")
@@ -307,6 +329,7 @@ class App:
     def on_closing(self):
         self.stop_video()
         self.media_player.release()
+        self.sound_player.release()
         self.stop_conversation()
         self.root.destroy()
 

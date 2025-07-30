@@ -1,10 +1,11 @@
 import os
+import time
 import azure.cognitiveservices.speech as speechsdk
 import google.generativeai as genai
 from dotenv import load_dotenv
 from elevenlabs.client import ElevenLabs
-import pyaudio
 import queue
+import sounddevice as sd # <-- Replaces other audio libraries
 
 # --- 1. CONFIGURATION ---
 # Load environment variables from .env file
@@ -59,7 +60,7 @@ class ConversationalAI:
         persona_file_path = os.path.join("personas", f"{persona_name}.txt")
         persona_prompt = self.load_persona(persona_file_path)
 
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         self.chat_session = model.start_chat(history=[
             {'role': 'user', 'parts': [persona_prompt]},
             {'role': 'model', 'parts': ["Understood. I will now respond as this persona."]}
@@ -96,7 +97,6 @@ class ConversationalAI:
             self._send_update("log", "❓ Understood nothing.")
             self._send_update("status", "Couldn't hear you. Try again.")
         elif result.reason == speechsdk.ResultReason.Canceled:
-            # This can happen if stop_session is called while listening
             if self.is_running:
                 self._send_update("log", f"🚫 Canceled: {result.cancellation_details.reason}")
                 self._send_update("status", "Speech recognition canceled.")
@@ -114,14 +114,20 @@ class ConversationalAI:
             self._send_update("log", f"An error occurred with the Gemini API: {e}")
             return "Sorry, I'm having trouble thinking right now."
 
+    # --- REWRITTEN FOR STREAMING WITH SOUNDDEVICE ---
     def speak_text_with_elevenlabs(self, text):
-        """Converts text to speech and plays it using PyAudio."""
+        """
+        Streams audio directly from ElevenLabs to the speakers using the
+        'sounddevice' library for low-latency playback.
+        """
         if not text or not ELEVENLABS_API_KEY or not ELEVENLABS_VOICE_ID or not self.is_running:
             return
         
         self._send_update("status", "💬 Speaking...")
         try:
             client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+            
+            # Request a stream of raw PCM audio data
             audio_stream = client.text_to_speech.stream(
                 text=text,
                 voice_id=ELEVENLABS_VOICE_ID,
@@ -129,20 +135,16 @@ class ConversationalAI:
                 output_format="pcm_24000"
             )
             
-            p = pyaudio.PyAudio()
-            stream = p.open(format=pyaudio.paInt16, channels=1, rate=24000, output=True)
-            for chunk in audio_stream:
-                if chunk and self.is_running:
-                    stream.write(chunk)
-                else:
-                    break # Stop playback if session ends
-            
-            stream.stop_stream()
-            stream.close()
-            p.terminate()
-                
+            # Use sounddevice to play the raw PCM stream
+            with sd.RawOutputStream(samplerate=24000, channels=1, dtype='int16') as stream:
+                for chunk in audio_stream:
+                    if chunk and self.is_running:
+                        stream.write(chunk)
+                    else:
+                        break # Stop playback if session ends
+
         except Exception as e:
-            self._send_update("log", f"An error occurred during audio playback: {e}")
+            self._send_update("log", f"An error occurred during audio streaming: {e}")
 
     def run_conversation_loop(self):
         """Runs the main conversation loop, continuously listening."""
@@ -163,4 +165,3 @@ class ConversationalAI:
 
             answer_text = self.get_gemini_response(question_text)
             self.speak_text_with_elevenlabs(answer_text)
-
